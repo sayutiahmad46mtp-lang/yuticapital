@@ -1,14 +1,33 @@
--- n4th + AFK Drop Semua Seed
--- Ambil n4th-main.lua terbaru dari GitHub, pasang patch AFK di memori, lalu jalankan.
--- Kalau salah satu patch tidak cocok (script berubah), script asli dijalankan tanpa fitur AFK.
+-- n4th + perbaikan error kompilasi + AFK Drop Semua Seed (v2)
+-- Masalah yang diperbaiki: n4th-main.lua terbaru gagal dikompilasi dengan pesan
+--   "Out of local registers when trying to allocate words: exceeded limit 200"
+-- karena blok World Finder tidak dibungkus fungsi (batas 200 variabel local).
+-- Loader ini membungkusnya di memori, lalu menambah fitur AFK.
+-- Urutan percobaan: perbaikan + AFK  ->  perbaikan saja  ->  script asli.
 assert(type(loadstring) == "function", "[AFK] Executor tidak menyediakan loadstring")
 local repository = "ZennJxD/n4th"
 local httpService = game:GetService("HttpService")
 
 ---------------------------------------------------------------------
--- PATCH (cari teks asli -> ganti). Tiap teks harus muncul tepat 1x.
+-- PERBAIKAN: bungkus blok World Finder jadi fungsi (sama seperti tab lain)
 ---------------------------------------------------------------------
-local PATCHES = {
+local FIX = {
+    {
+        name = "buka bungkus World Finder",
+        old = "-- WORLD FINDER: pindah world dan verifikasi seluruh foreground sebelum menyebutnya tanpa lock.\ndo\n",
+        new = "-- WORLD FINDER: pindah world dan verifikasi seluruh foreground sebelum menyebutnya tanpa lock.\ndo (function()\n",
+    },
+    {
+        name = "tutup bungkus World Finder",
+        old = "end\n\n-- ===== TAB: WORLD FINDER =====",
+        new = "end)() end\n\n-- ===== TAB: WORLD FINDER =====",
+    },
+}
+
+---------------------------------------------------------------------
+-- FITUR AFK: drop semua seed yang stack-nya penuh (200)
+---------------------------------------------------------------------
+local AFK = {
     {
         name = "tabel AutoDrop",
         old = [==[local AutoDrop = {]==],
@@ -92,9 +111,10 @@ local PATCHES = {
     },
 }
 
-local function applyPatches(source)
+-- Semua teks harus muncul tepat 1x; kalau tidak, seluruh daftar dilewati.
+local function applyPatches(source, list)
     local out = source
-    for _, p in ipairs(PATCHES) do
+    for _, p in ipairs(list) do
         local s, e = out:find(p.old, 1, true)
         if not s then return nil, p.name .. " (teks tidak ketemu)" end
         if out:find(p.old, e + 1, true) then return nil, p.name .. " (muncul lebih dari satu kali)" end
@@ -142,23 +162,37 @@ end
 ---------------------------------------------------------------------
 -- JALANKAN
 ---------------------------------------------------------------------
+local function pickCompiled(source)
+    source = (source:gsub("\r\n", "\n"))
+    local candidates = {}
+    local fixed, fixProblem = applyPatches(source, FIX)
+    local base = fixed or source
+    if not fixed then print("[AFK] Perbaikan kompilasi tidak dipasang: " .. tostring(fixProblem)) end
+    local full, afkProblem = applyPatches(base, AFK)
+    if full then
+        candidates[#candidates + 1] = { text = full, label = (fixed and "perbaikan + AFK" or "AFK saja") }
+    else
+        print("[AFK] Patch AFK dilewati: " .. tostring(afkProblem))
+    end
+    if fixed then candidates[#candidates + 1] = { text = fixed, label = "perbaikan saja (tanpa AFK)" } end
+    candidates[#candidates + 1] = { text = source, label = "script asli" }
+    local lastCompileError
+    for _, c in ipairs(candidates) do
+        local fn, err = loadstring(c.text, "n4th-main")
+        if fn then return fn, c.label end
+        lastCompileError = tostring(err)
+        print("[AFK] Gagal dikompilasi (" .. c.label .. "): " .. lastCompileError)
+    end
+    return nil, lastCompileError
+end
+
 local lastError = "respons kosong"
 for attempt = 1, 3 do
-    local ok, source, label = pcall(latestSource)
+    local ok, source, commit = pcall(latestSource)
     if ok then
-        local patched, problem = applyPatches(source)
-        if patched then
-            print("[AFK] Patch AFK terpasang (versi " .. tostring(label) .. ")")
-        else
-            warn("[AFK] Patch dilewati: " .. tostring(problem) .. ". Menjalankan script asli tanpa fitur AFK.")
-            patched = source
-        end
-        local fn, compileError = loadstring(patched, "n4th-main")
-        if not fn and patched ~= source then
-            warn("[AFK] Hasil patch gagal dikompilasi (" .. tostring(compileError) .. "). Pakai script asli.")
-            fn, compileError = loadstring(source, "n4th-main")
-        end
-        if not fn then error("[AFK] Script gagal dikompilasi: " .. tostring(compileError), 0) end
+        local fn, label = pickCompiled(source)
+        if not fn then error("[AFK] Semua versi gagal dikompilasi: " .. tostring(label), 0) end
+        print("[AFK] Menjalankan: " .. label .. " (versi " .. tostring(commit) .. ")")
         local ran, result = xpcall(fn, function(err)
             if debug and type(debug.traceback) == "function" then return debug.traceback(tostring(err), 2) end
             return tostring(err)
