@@ -1,15 +1,13 @@
--- n4th + perbaikan error kompilasi + AFK Drop Semua Seed (v2)
--- Masalah yang diperbaiki: n4th-main.lua terbaru gagal dikompilasi dengan pesan
---   "Out of local registers when trying to allocate words: exceeded limit 200"
--- karena blok World Finder tidak dibungkus fungsi (batas 200 variabel local).
--- Loader ini membungkusnya di memori, lalu menambah fitur AFK.
--- Urutan percobaan: perbaikan + AFK  ->  perbaikan saja  ->  script asli.
+-- n4th + perbaikan error kompilasi + AFK Drop Semua Seed + FPS Boost (v3)
+-- Tiap bagian dipasang sendiri-sendiri. Kalau salah satu tidak cocok dengan script terbaru,
+-- bagian itu dilewati dan yang lain tetap jalan. Urutan percobaan kompilasi:
+--   semua yang berhasil dipasang  ->  perbaikan saja  ->  script asli.
 assert(type(loadstring) == "function", "[AFK] Executor tidak menyediakan loadstring")
 local repository = "ZennJxD/n4th"
 local httpService = game:GetService("HttpService")
 
 ---------------------------------------------------------------------
--- PERBAIKAN: bungkus blok World Finder jadi fungsi (sama seperti tab lain)
+-- PERBAIKAN: bungkus blok World Finder jadi fungsi (batas 200 variabel local)
 ---------------------------------------------------------------------
 local FIX = {
     {
@@ -111,6 +109,155 @@ local AFK = {
     },
 }
 
+---------------------------------------------------------------------
+-- FPS BOOST: toggle + opsi di tab Pengaturan > Opsi
+---------------------------------------------------------------------
+local FPS = {
+    {
+        name = "menu FPS Boost",
+        old = [==[local OptTab = Box.SetOpt]==],
+        new = [==[local OptTab = Box.SetOpt
+
+do (function()
+    local Lighting = game:GetService("Lighting")
+    local Boost = {
+        On = false, Cap = 40, Quality = true, Shadows = true, Hide3D = false, HideGui = false, Saved = nil,
+    }
+    Session.FpsBoost = Boost
+    Config.add("FpsBoost", Boost, { "Cap", "Quality", "Shadows", "Hide3D", "HideGui" })
+
+    local function setCap(n)
+        local f = setfpscap or set_fps_cap
+        if type(f) ~= "function" and syn then f = syn.set_fps_cap end
+        if type(f) ~= "function" then return false end
+        return (pcall(f, n))
+    end
+
+    local function apply()
+        local s = { effects = {} }
+        Boost.Saved = s
+        s.lite, s.visual = State.LiteMode, State.Visual
+        if not State.LiteMode then setLite(true) end
+        State.Visual = false
+        if Boost.Quality then
+            pcall(function()
+                local r = settings().Rendering
+                s.quality = r.QualityLevel
+                r.QualityLevel = Enum.QualityLevel.Level01
+            end)
+        end
+        if Boost.Shadows then
+            pcall(function()
+                s.shadows = Lighting.GlobalShadows
+                Lighting.GlobalShadows = false
+                for _, e in ipairs(Lighting:GetChildren()) do
+                    if e:IsA("PostEffect") then
+                        s.effects[e] = e.Enabled
+                        e.Enabled = false
+                    end
+                end
+            end)
+        end
+        if Boost.Hide3D then
+            if pcall(function() RunService:Set3dRenderingEnabled(false) end) then s.hide3d = true end
+        end
+        if Boost.HideGui then
+            local gg = PlayerGui:FindFirstChild("GameGui")
+            if gg and gg:IsA("ScreenGui") then
+                s.gui, s.guiOn = gg, gg.Enabled
+                gg.Enabled = false
+            end
+        end
+        s.fps = setCap(Boost.Cap)
+        if not s.fps then notify("FPS Boost", "Executor tidak punya setfpscap, batas FPS dilewati", 4) end
+    end
+
+    local function restore()
+        local s = Boost.Saved
+        if not s then return end
+        Boost.Saved = nil
+        if s.fps then setCap(60) end
+        if s.quality then pcall(function() settings().Rendering.QualityLevel = s.quality end) end
+        if s.shadows ~= nil then pcall(function() Lighting.GlobalShadows = s.shadows end) end
+        for e, was in pairs(s.effects) do pcall(function() e.Enabled = was end) end
+        if s.hide3d then pcall(function() RunService:Set3dRenderingEnabled(true) end) end
+        if s.gui then pcall(function() s.gui.Enabled = s.guiOn end) end
+        if s.lite == false then setLite(false) end
+        if s.visual ~= nil then State.Visual = s.visual end
+    end
+
+    function Boost.set(on)
+        if on == Boost.On then return end
+        Boost.On = on
+        if on then apply() else restore() end
+    end
+
+    local function changed()
+        if Boost.On then
+            restore()
+            apply()
+        end
+    end
+
+    safe(function()
+        OptTab:Toggle({
+            Title = "FPS Boost",
+            Desc = "Kurangi beban HP: batas FPS, grafis terendah, Mode Lite & animasi dimatikan. Semua dikembalikan saat dimatikan.",
+            Value = false,
+            Callback = function(on) Boost.set(on) end,
+        })
+    end)
+
+    addNumber(OptTab, {
+        Title = "Batas FPS",
+        Desc = "Makin rendah makin ringan. Jangan di bawah 30 kalau pakai Clear / Farmer / Pabrik",
+        Min = 15, Max = 60, Step = 5, Default = Boost.Cap,
+        Callback = function(v)
+            Boost.Cap = math.floor(v)
+            if Boost.On then setCap(Boost.Cap) end
+        end,
+    })
+
+    safe(function()
+        OptTab:Toggle({
+            Title = "Boost: kualitas grafis terendah",
+            Value = Boost.Quality,
+            Callback = function(on) Boost.Quality = on changed() end,
+        })
+    end)
+
+    safe(function()
+        OptTab:Toggle({
+            Title = "Boost: matikan bayangan & efek layar",
+            Value = Boost.Shadows,
+            Callback = function(on) Boost.Shadows = on changed() end,
+        })
+    end)
+
+    safe(function()
+        OptTab:Toggle({
+            Title = "Boost: matikan render 3D",
+            Desc = "Game digambar lewat UI, jadi tampilan tidak berubah. Bisa bikin latar hitam di sebagian executor.",
+            Value = Boost.Hide3D,
+            Callback = function(on) Boost.Hide3D = on changed() end,
+        })
+    end)
+
+    safe(function()
+        OptTab:Toggle({
+            Title = "Boost: sembunyikan layar game (AFK)",
+            Desc = "Layar game jadi kosong tapi farming tetap jalan. Paling hemat GPU. Matikan untuk melihat game lagi.",
+            Value = Boost.HideGui,
+            Callback = function(on) Boost.HideGui = on changed() end,
+        })
+    end)
+
+    -- dipulihkan otomatis saat script ditutup / dijalankan ulang
+    table.insert(Connections, { Disconnect = function() pcall(restore) end })
+end)() end]==],
+    },
+}
+
 -- Semua teks harus muncul tepat 1x; kalau tidak, seluruh daftar dilewati.
 local function applyPatches(source, list)
     local out = source
@@ -164,17 +311,26 @@ end
 ---------------------------------------------------------------------
 local function pickCompiled(source)
     source = (source:gsub("\r\n", "\n"))
-    local candidates = {}
     local fixed, fixProblem = applyPatches(source, FIX)
-    local base = fixed or source
     if not fixed then print("[AFK] Perbaikan kompilasi tidak dipasang: " .. tostring(fixProblem)) end
-    local full, afkProblem = applyPatches(base, AFK)
-    if full then
-        candidates[#candidates + 1] = { text = full, label = (fixed and "perbaikan + AFK" or "AFK saja") }
-    else
-        print("[AFK] Patch AFK dilewati: " .. tostring(afkProblem))
+    local current, added = fixed or source, {}
+    for _, feature in ipairs({ { "AFK", AFK }, { "FPS Boost", FPS } }) do
+        local patched, problem = applyPatches(current, feature[2])
+        if patched then
+            current = patched
+            added[#added + 1] = feature[1]
+        else
+            print("[AFK] Fitur " .. feature[1] .. " dilewati: " .. tostring(problem))
+        end
     end
-    if fixed then candidates[#candidates + 1] = { text = fixed, label = "perbaikan saja (tanpa AFK)" } end
+    local candidates = {}
+    if #added > 0 then
+        candidates[#candidates + 1] = {
+            text = current,
+            label = (fixed and "perbaikan + " or "") .. table.concat(added, " + "),
+        }
+    end
+    if fixed then candidates[#candidates + 1] = { text = fixed, label = "perbaikan saja" } end
     candidates[#candidates + 1] = { text = source, label = "script asli" }
     local lastCompileError
     for _, c in ipairs(candidates) do
