@@ -1,4 +1,4 @@
--- n4th + perbaikan error kompilasi + AFK Drop Semua Seed + FPS Boost (v3)
+-- n4th + perbaikan error kompilasi + AFK Drop Semua Seed + FPS Boost + susunan menu baru (v6)
 -- Tiap bagian dipasang sendiri-sendiri. Kalau salah satu tidak cocok dengan script terbaru,
 -- bagian itu dilewati dan yang lain tetap jalan. Urutan percobaan kompilasi:
 --   semua yang berhasil dipasang  ->  perbaikan saja  ->  script asli.
@@ -120,6 +120,7 @@ local FPS = {
 
 do (function()
     local Lighting = game:GetService("Lighting")
+    local PerfTab = Box.SetPerf or OptTab
     local Boost = {
         On = false, Cap = 40, Quality = true, Shadows = true, Hide3D = false, HideGui = false, Saved = nil,
     }
@@ -200,7 +201,7 @@ do (function()
     end
 
     safe(function()
-        OptTab:Toggle({
+        PerfTab:Toggle({
             Title = "FPS Boost",
             Desc = "Kurangi beban HP: batas FPS, grafis terendah, Mode Lite & animasi dimatikan. Semua dikembalikan saat dimatikan.",
             Value = false,
@@ -208,7 +209,7 @@ do (function()
         })
     end)
 
-    addNumber(OptTab, {
+    addNumber(PerfTab, {
         Title = "Batas FPS",
         Desc = "Makin rendah makin ringan. Jangan di bawah 30 kalau pakai Clear / Farmer / Pabrik",
         Min = 15, Max = 60, Step = 5, Default = Boost.Cap,
@@ -219,7 +220,7 @@ do (function()
     })
 
     safe(function()
-        OptTab:Toggle({
+        PerfTab:Toggle({
             Title = "Boost: kualitas grafis terendah",
             Value = Boost.Quality,
             Callback = function(on) Boost.Quality = on changed() end,
@@ -227,7 +228,7 @@ do (function()
     end)
 
     safe(function()
-        OptTab:Toggle({
+        PerfTab:Toggle({
             Title = "Boost: matikan bayangan & efek layar",
             Value = Boost.Shadows,
             Callback = function(on) Boost.Shadows = on changed() end,
@@ -235,7 +236,7 @@ do (function()
     end)
 
     safe(function()
-        OptTab:Toggle({
+        PerfTab:Toggle({
             Title = "Boost: matikan render 3D",
             Desc = "Game digambar lewat UI, jadi tampilan tidak berubah. Bisa bikin latar hitam di sebagian executor.",
             Value = Boost.Hide3D,
@@ -244,7 +245,7 @@ do (function()
     end)
 
     safe(function()
-        OptTab:Toggle({
+        PerfTab:Toggle({
             Title = "Boost: sembunyikan layar game (AFK)",
             Desc = "Layar game jadi kosong tapi farming tetap jalan. Paling hemat GPU. Matikan untuk melihat game lagi.",
             Value = Boost.HideGui,
@@ -256,6 +257,198 @@ do (function()
     table.insert(Connections, { Disconnect = function() pcall(restore) end })
 end)() end]==],
     },
+}
+
+
+---------------------------------------------------------------------
+-- SUSUNAN MENU BARU: grup, urutan & nama tab
+--   Farming: Auto Farm, Harvest, Splice | World: Clear World, Dirt Farm, Pabrik
+--   Shop: Drop, Titik Drop, Vending, Tas | Info: Growscan, Statistik
+--   Utilitas: Auto Chat, World Finder, Lainnya | Keamanan: Auto Mods, Auto Reconnect
+--   Setelan: Umum, Performa, Koneksi & Config, Discord
+---------------------------------------------------------------------
+local LAYOUT = {
+    {
+        name = "grup World, Shop, Info",
+        old = [==[{ key = "farm", title = "Farming", icon = "sprout", opened = true },]==],
+        new = [==[{ key = "farm", title = "Farming", icon = "sprout", opened = true },
+    { key = "world", title = "World", icon = "map" },
+    { key = "shop", title = "Shop", icon = "shopping-bag" },
+    { key = "info", title = "Info", icon = "info" },]==],
+    },
+    {
+        name = "grup Utilitas",
+        old = [==[{ key = "fitur", title = "Fitur", icon = "sparkles" },]==],
+        new = [==[{ key = "fitur", title = "Utilitas", icon = "sparkles" },]==],
+    },
+    {
+        name = "urutan dan nama tab",
+        old = [==[local function makeTab(title, icon, group)]==],
+        new = [==[Session.PreTabs = {}
+do (function()
+    -- { judul lama (dipakai kode), judul baru, ikon, grup }. Urutan di sini = urutan di sidebar.
+    local PLAN = {
+        { "Farm", "Auto Farm", "pickaxe", "farm" },
+        { "Farmer", "Harvest", "leaf", "farm" },
+        { "Splice", "Splice", "git-merge", "farm" },
+        { "Clear World", "Clear World", "eraser", "world" },
+        { "Lahan", "Dirt Farm", "layout-grid", "world" },
+        { "Pabrik", "Pabrik", "factory", "world" },
+        { "Auto Drop", "Drop", "package-open", "shop" },
+        { "Titik Drop", "Titik Drop", "map-pin", "shop" },
+        { "Vending", "Vending", "store", "shop" },
+        { "Tas", "Tas", "backpack", "shop" },
+        { "Growscan", "Growscan", "scan-search", "info" },
+        { "Statistik", "Statistik", "bar-chart-3", "info" },
+        { "Auto Chat", "Auto Chat", "message-circle", "fitur" },
+        { "World Finder", "World Finder", "globe", "fitur" },
+        { "Bonus", "Lainnya", "gift", "fitur" },
+        { "Penjaga", "Auto Mods", "eye", "aman" },
+        { "Auto Reconnect", "Auto Reconnect", "refresh-cw", "aman" },
+        { "Pengaturan", "Umum", "sliders-horizontal", "setel" },
+        { "Performa", "Performa", "gauge", "setel" },
+        { "Koneksi", "Koneksi & Config", "plug", "setel" },
+        { "Discord", "Discord", "bell", "setel" },
+    }
+    for _, e in ipairs(PLAN) do
+        local section = Groups[e[4]]
+        if section then
+            local ok, tab = pcall(function() return section:Tab({ Title = e[2], Icon = e[3] }) end)
+            if ok and tab then Session.PreTabs[e[1]] = tab end
+        end
+    end
+end)() end
+
+local function makeTab(title, icon, group)
+    local cached = Session.PreTabs[title]
+    if cached then return cached end
+    local created = Session.rawTab(title, icon, group)
+    Session.PreTabs[title] = created
+    return created
+end
+
+Session.rawTab = function(title, icon, group)]==],
+    },
+    {
+        name = "Auto Reconnect jadi tab Keamanan",
+        old = [==[local rBox = box(ConnTab, "Auto Reconnect", false)]==],
+        new = [==[local rBox = box(makeTab("Auto Reconnect", "refresh-cw", "aman"), "Auto Reconnect", true)]==],
+    },
+    {
+        name = "kotak Performa",
+        old = [==[Box.SetOpt = box(SetTab, "Opsi", true)]==],
+        new = [==[Box.SetOpt = box(SetTab, "Opsi", true)
+Box.SetPerf = box(makeTab("Performa", "gauge", "setel"), "Performa", true)]==],
+    },
+    {
+        name = "Mode Lite ke Performa",
+        old = "OptTab:Toggle({\n        Title = \"Mode Lite\",",
+        new = "Box.SetPerf:Toggle({\n        Title = \"Mode Lite\",",
+    },
+    {
+        name = "Mute suara ke Performa",
+        old = "OptTab:Toggle({\n        Title = \"Mute suara pukulan\",",
+        new = "Box.SetPerf:Toggle({\n        Title = \"Mute suara pukulan\",",
+    },
+    {
+        name = "Animasi aksi ke Performa",
+        old = "OptTab:Toggle({\n        Title = \"Animasi aksi\",",
+        new = "Box.SetPerf:Toggle({\n        Title = \"Animasi aksi\",",
+    },
+    {
+        name = "terjemahan English",
+        old = [==[["Fitur"] = "Features", ["Keamanan"] = "Security", ["Setelan"] = "Setup",]==],
+        new = [==[["Fitur"] = "Features", ["Keamanan"] = "Security", ["Setelan"] = "Setup",
+    ["Utilitas"] = "Utilities", ["Umum"] = "General", ["Performa"] = "Performance",
+    ["Koneksi & Config"] = "Connection & Config",
+    ["Status Harvest"] = "Harvest Status", ["Jalankan Harvest"] = "Run Harvest",
+    ["Status Dirt Farm"] = "Dirt Farm Status", ["Bangun Dirt Farm"] = "Build Dirt Farm",
+    ["Status Auto Mods"] = "Auto Mods Status", ["Aktifkan Auto Mods"] = "Enable Auto Mods",]==],
+    },
+}
+
+---------------------------------------------------------------------
+-- RAPI-IN UI: tab Farm. Collect & kecepatan (global) pindah ke Setelan > Umum,
+-- Auto Break Block pindah ke tab Clear World.
+---------------------------------------------------------------------
+local FARMUI = {
+    {
+        name = "judul kotak Auto Farm",
+        old = [==[Box.FarmCtl = box(FarmTab, "Kontrol", true)]==],
+        new = [==[Box.FarmCtl = box(FarmTab, "Auto Farm", true)]==],
+    },
+    {
+        name = "kotak Mode, Collect, Kecepatan",
+        old = [==[Box.FarmSpeed = box(FarmTab, "Mode & Kecepatan", false)]==],
+        new = [==[Box.FarmSpeed = box(FarmTab, "Mode", false)
+Box.GlobCollect = box(makeTab("Pengaturan", "sliders-horizontal", "setel"), "Collect", false)
+Box.GlobSpeed = box(makeTab("Pengaturan", "sliders-horizontal", "setel"), "Kecepatan", false)]==],
+    },
+    {
+        name = "Auto Collect pindah",
+        old = "Box.FarmCtl:Toggle({\n        Title = \"Auto Collect\",",
+        new = "Box.GlobCollect:Toggle({\n        Title = \"Auto Collect\",",
+    },
+    {
+        name = "Mode collect pindah",
+        old = "Box.FarmCtl:Dropdown({\n        Title = \"Mode collect\",",
+        new = "Box.GlobCollect:Dropdown({\n        Title = \"Mode collect\",",
+    },
+    {
+        name = "Radius collect pindah",
+        old = "addNumber(Box.FarmCtl, {\n    Title = \"Radius collect (mode Remote)\",",
+        new = "addNumber(Box.GlobCollect, {\n    Title = \"Radius collect (mode Remote)\",",
+    },
+    {
+        name = "Speed Place pindah",
+        old = "addNumber(SpeedTab, {\n    Title = \"Speed Place (ms)\",",
+        new = "addNumber(Box.GlobSpeed, {\n    Title = \"Speed Place (ms)\",",
+    },
+    {
+        name = "Speed Break pindah",
+        old = "addNumber(SpeedTab, {\n    Title = \"Speed Break (ms)\",",
+        new = "addNumber(Box.GlobSpeed, {\n    Title = \"Speed Break (ms)\",",
+    },
+    {
+        name = "Auto Break Block pindah ke Clear World",
+        old = [==[local controls = box(FarmTab, "Auto Break Block", true)]==],
+        new = [==[local controls = box(makeTab("Clear World", "eraser", "world"), "Auto Break Block", false)]==],
+    },
+}
+
+---------------------------------------------------------------------
+-- GANTI NAMA yang kelihatan di menu: Farmer -> Harvest, Lahan -> Dirt Farm, Penjaga -> Auto Mods
+---------------------------------------------------------------------
+local RENAME = {
+    {
+        name = "judul notifikasi",
+        old = [==[Title = I18N.T(title), Content = I18N.T(content)]==],
+        new = [==[Title = I18N.T(({ Penjaga = "Auto Mods", Lahan = "Dirt Farm", ["Bangun Lahan"] = "Dirt Farm", Farmer = "Harvest" })[title] or title), Content = I18N.T(content)]==],
+    },
+    { name = "Status Farmer", old = [==[Title = "Status Farmer"]==], new = [==[Title = "Status Harvest"]==] },
+    { name = "Jalankan Farmer", old = [==[Title = "Jalankan Farmer",]==], new = [==[Title = "Jalankan Harvest",]==] },
+    { name = "Status Lahan", old = [==[Title = "Status Lahan"]==], new = [==[Title = "Status Dirt Farm"]==] },
+    { name = "kotak Bangun Lahan", old = [==[local lCtl = box(LTab, "Bangun Lahan", true)]==], new = [==[local lCtl = box(LTab, "Bangun Dirt Farm", true)]==] },
+    { name = "toggle Bangun Lahan", old = [==[Title = "Bangun Lahan",]==], new = [==[Title = "Bangun Dirt Farm",]==] },
+    { name = "Status Penjaga", old = [==[Title = "Status Penjaga"]==], new = [==[Title = "Status Auto Mods"]==] },
+    { name = "Aktifkan Penjaga", old = [==[Title = "Aktifkan Penjaga",]==], new = [==[Title = "Aktifkan Auto Mods",]==] },
+}
+
+
+---------------------------------------------------------------------
+-- NAMA: n4th -> utimeme (judul menu, tombol buka, watermark nama di atas karakter, notifikasi)
+-- Nama folder config dan nama internal tidak diubah, supaya pengaturan lama tidak hilang.
+---------------------------------------------------------------------
+local BRAND = {
+    { name = "judul jendela", old = "WindUI:CreateWindow({\n    Title = \"n4th\",", new = "WindUI:CreateWindow({\n    Title = \"utimeme\"," },
+    { name = "tombol buka menu", old = "Window:EditOpenButton({\n        Title = \"n4th\",", new = "Window:EditOpenButton({\n        Title = \"utimeme\"," },
+    { name = "popup bahasa", old = "WindUI:Popup({\n            Title = \"n4th\",", new = "WindUI:Popup({\n            Title = \"utimeme\"," },
+    { name = "nama di atas karakter", old = [==[NameText = "n4th",]==], new = [==[NameText = "utimeme",]==] },
+    { name = "nama pengirim Discord", old = [==[username = "n4th",]==], new = [==[username = "utimeme",]==] },
+    { name = "tes notifikasi", old = [==[Hook.send("test", "Tes notifikasi dari n4th")]==], new = [==[Hook.send("test", "Tes notifikasi dari utimeme")]==] },
+    { name = "tes notifikasi EN", old = [==[["Tes notifikasi dari n4th"] = "Test notification from n4th",]==], new = [==[["Tes notifikasi dari utimeme"] = "Test notification from utimeme",]==] },
+    { name = "tes World Finder", old = [==["World Finder siap mengirim hasil hunting dari n4th"]==], new = [==["World Finder siap mengirim hasil hunting dari utimeme"]==] },
+    { name = "notifikasi koneksi", old = [==[reconnect("n4th v5.2")]==], new = [==[reconnect("utimeme")]==] },
 }
 
 -- Semua teks harus muncul tepat 1x; kalau tidak, seluruh daftar dilewati.
@@ -314,7 +507,7 @@ local function pickCompiled(source)
     local fixed, fixProblem = applyPatches(source, FIX)
     if not fixed then print("[AFK] Perbaikan kompilasi tidak dipasang: " .. tostring(fixProblem)) end
     local current, added = fixed or source, {}
-    for _, feature in ipairs({ { "AFK", AFK }, { "FPS Boost", FPS } }) do
+    for _, feature in ipairs({ { "AFK", AFK }, { "FPS Boost", FPS }, { "Susunan menu", LAYOUT }, { "UI Farm", FARMUI }, { "Nama baru", RENAME }, { "Nama utimeme", BRAND } }) do
         local patched, problem = applyPatches(current, feature[2])
         if patched then
             current = patched
