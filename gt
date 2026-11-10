@@ -1,4 +1,4 @@
--- n4th + perbaikan error kompilasi + AFK Drop Semua Seed + FPS Boost + susunan menu baru (v6)
+-- n4th + perbaikan error kompilasi + AFK Drop Semua Seed + FPS Boost + susunan menu baru (v8)
 -- Tiap bagian dipasang sendiri-sendiri. Kalau salah satu tidak cocok dengan script terbaru,
 -- bagian itu dilewati dan yang lain tetap jalan. Urutan percobaan kompilasi:
 --   semua yang berhasil dipasang  ->  perbaikan saja  ->  script asli.
@@ -451,6 +451,59 @@ local BRAND = {
     { name = "notifikasi koneksi", old = [==[reconnect("n4th v5.2")]==], new = [==[reconnect("utimeme")]==] },
 }
 
+
+---------------------------------------------------------------------
+-- HUBUNGKAN OTOMATIS: kalau sudah di dalam world tapi data world / tas belum ketemu
+-- (misal script dijalankan sebelum world siap), coba hubungkan ulang sendiri.
+---------------------------------------------------------------------
+local AUTOLINK = {
+    {
+        name = "hubungkan otomatis",
+        old = [==[Session.InitStep = "siap"]==],
+        new = [==[task.spawn(function()
+    task.wait(8)
+    local tries = 0
+    while alive() do
+        if not (Refs.World and Refs.Inv) and getPlayerTile() then
+            tries += 1
+            if tries <= 5 or tries % 8 == 0 then
+                UI.later("autoLink", function() reconnect("Hubungkan otomatis") end)
+            end
+        else
+            tries = 0
+            if not UI.DropOk then
+                UI.later("autoDropdown", function() doInvRefresh(true) end)
+            end
+        end
+        task.wait(tries <= 5 and 8 or 8)
+    end
+end)
+
+Session.InitStep = "siap"]==],
+    },
+}
+
+
+---------------------------------------------------------------------
+-- PERBAIKAN DROPDOWN: isi daftar langsung dulu; kalau gagal baru lewat jalur izin penuh (lama)
+---------------------------------------------------------------------
+local DROPFIX = {
+    {
+        name = "refresh dropdown langsung",
+        old = [==[function UI.ddRefresh(dd, labels)]==],
+        new = [==[function UI.ddRefresh(dd, labels)
+    if dd and pcall(function() dd:Refresh(labels) end) then
+        UI.DropOk = os.clock()
+        UI.DropErr = nil
+        return
+    end
+    return UI.ddRefreshElevated(dd, labels)
+end
+
+function UI.ddRefreshElevated(dd, labels)]==],
+    },
+}
+
 -- Semua teks harus muncul tepat 1x; kalau tidak, seluruh daftar dilewati.
 local function applyPatches(source, list)
     local out = source
@@ -507,7 +560,7 @@ local function pickCompiled(source)
     local fixed, fixProblem = applyPatches(source, FIX)
     if not fixed then print("[AFK] Perbaikan kompilasi tidak dipasang: " .. tostring(fixProblem)) end
     local current, added = fixed or source, {}
-    for _, feature in ipairs({ { "AFK", AFK }, { "FPS Boost", FPS }, { "Susunan menu", LAYOUT }, { "UI Farm", FARMUI }, { "Nama baru", RENAME }, { "Nama utimeme", BRAND } }) do
+    for _, feature in ipairs({ { "AFK", AFK }, { "FPS Boost", FPS }, { "Susunan menu", LAYOUT }, { "UI Farm", FARMUI }, { "Nama baru", RENAME }, { "Nama utimeme", BRAND }, { "Hubungkan otomatis", AUTOLINK }, { "Perbaikan dropdown", DROPFIX } }) do
         local patched, problem = applyPatches(current, feature[2])
         if patched then
             current = patched
