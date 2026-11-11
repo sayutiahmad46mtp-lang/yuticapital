@@ -1,4 +1,4 @@
--- n4th + perbaikan error kompilasi + AFK Drop Semua Seed + FPS Boost + susunan menu baru (v8)
+-- n4th + perbaikan error kompilasi + AFK Drop Semua Seed + FPS Boost + susunan menu baru (v9)
 -- Tiap bagian dipasang sendiri-sendiri. Kalau salah satu tidak cocok dengan script terbaru,
 -- bagian itu dilewati dan yang lain tetap jalan. Urutan percobaan kompilasi:
 --   semua yang berhasil dipasang  ->  perbaikan saja  ->  script asli.
@@ -504,6 +504,44 @@ function UI.ddRefreshElevated(dd, labels)]==],
     },
 }
 
+
+---------------------------------------------------------------------
+-- PERBAIKAN AUTO RECONNECT / AUTO JOIN
+--  1. "berhasil masuk" harus benar-benar sudah ada di world tujuan (nama cocok + karakter muncul)
+--  2. "di luar world" dideteksi juga dari karakter yang tidak ada (bukan cuma nama world kosong)
+--  3. Rejoin setelah disconnect server memuat script kita, bukan link n4th asli
+---------------------------------------------------------------------
+local REJOINFIX = {
+    {
+        name = "batas waktu masuk world",
+        old = [==[while alive() and os.clock() - t0 < 8 do]==],
+        new = [==[while alive() and os.clock() - t0 < 25 do]==],
+    },
+    {
+        name = "cek berhasil masuk",
+        old = [==[if rawget(w, "fg") ~= oldFg then return true end]==],
+        new = [==[if rawget(w, "fg") ~= oldFg and string.upper(worldName()) == string.upper(tostring(name)) and Auto.here() then return true end]==],
+    },
+    {
+        name = "deteksi di luar world",
+        old = [==[local out = Guard.worldName() == ""]==],
+        new = [==[local out = Guard.worldName() == "" or not Auto.here()]==],
+    },
+    {
+        name = "URL script rejoin",
+        old = [==[Config.add("Reconnect", Rejoin, { "On", "World", "Server", "DelaySec", "ScriptUrl", "Keep", "Target" })]==],
+        new = [==[Config.add("Reconnect", Rejoin, { "On", "World", "Server", "DelaySec", "ScriptUrl", "Keep", "Target" })
+if type(Rejoin.ScriptUrl) ~= "string" or Rejoin.ScriptUrl == "" or Rejoin.ScriptUrl:find("ZennJxD", 1, true) then
+    Rejoin.ScriptUrl = "https://raw.githubusercontent.com/sayutiahmad46mtp-lang/yuticapital/main/gt"
+end]==],
+    },
+    {
+        name = "URL script World Finder",
+        old = [==[loadstring(game:HttpGet("https://raw.githubusercontent.com/ZennJxD/n4th/refs/heads/main/n4th"))()]==],
+        new = [==[loadstring(game:HttpGet("https://raw.githubusercontent.com/sayutiahmad46mtp-lang/yuticapital/main/gt"))()]==],
+    },
+}
+
 -- Semua teks harus muncul tepat 1x; kalau tidak, seluruh daftar dilewati.
 local function applyPatches(source, list)
     local out = source
@@ -560,7 +598,7 @@ local function pickCompiled(source)
     local fixed, fixProblem = applyPatches(source, FIX)
     if not fixed then print("[AFK] Perbaikan kompilasi tidak dipasang: " .. tostring(fixProblem)) end
     local current, added = fixed or source, {}
-    for _, feature in ipairs({ { "AFK", AFK }, { "FPS Boost", FPS }, { "Susunan menu", LAYOUT }, { "UI Farm", FARMUI }, { "Nama baru", RENAME }, { "Nama utimeme", BRAND }, { "Hubungkan otomatis", AUTOLINK }, { "Perbaikan dropdown", DROPFIX } }) do
+    for _, feature in ipairs({ { "AFK", AFK }, { "FPS Boost", FPS }, { "Susunan menu", LAYOUT }, { "UI Farm", FARMUI }, { "Nama baru", RENAME }, { "Nama utimeme", BRAND }, { "Hubungkan otomatis", AUTOLINK }, { "Perbaikan dropdown", DROPFIX }, { "Perbaikan reconnect", REJOINFIX } }) do
         local patched, problem = applyPatches(current, feature[2])
         if patched then
             current = patched
