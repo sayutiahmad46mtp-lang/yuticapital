@@ -1,4 +1,4 @@
--- n4th + perbaikan error kompilasi + AFK Drop Semua Seed + FPS Boost + susunan menu baru (v9)
+-- n4th + perbaikan error kompilasi + AFK Drop Semua Seed + FPS Boost + susunan menu baru (v10)
 -- Tiap bagian dipasang sendiri-sendiri. Kalau salah satu tidak cocok dengan script terbaru,
 -- bagian itu dilewati dan yang lain tetap jalan. Urutan percobaan kompilasi:
 --   semua yang berhasil dipasang  ->  perbaikan saja  ->  script asli.
@@ -30,19 +30,19 @@ local AFK = {
         name = "tabel AutoDrop",
         old = [==[local AutoDrop = {]==],
         new = [==[local AutoDrop = {
-    AllSeeds = false,]==],
-    },
-    {
-        name = "config AutoDrop",
-        old = [==[Config.add("AutoDrop", AutoDrop, { "Items", "World", "X", "Y", "Facing" })]==],
-        new = [==[Config.add("AutoDrop", AutoDrop, { "Items", "World", "X", "Y", "Facing", "AllSeeds" })]==],
+    AllSeeds = true,]==],
     },
     {
         name = "fungsi seed penuh",
         old = [==[function AutoDrop.labels()]==],
-        new = [==[function AutoDrop.covers(id)
+        new = [==[function AutoDrop.isKept(id)
+        return (Pabrik.Running and id == Pabrik.SeedId) or (Farmer.Running and id == Farmer.SeedId)
+            or (Splice.Running and (id == Splice.A or id == Splice.B)) or false
+    end
+
+    function AutoDrop.covers(id)
         if table.find(AutoDrop.Items, id) then return true end
-        if not AutoDrop.AllSeeds then return false end
+        if not AutoDrop.AllSeeds or AutoDrop.isKept(id) then return false end
         local item = ItemDB[id]
         return item ~= nil and item.kind == "seed"
     end
@@ -56,7 +56,7 @@ local AFK = {
             for _, slot in pairs(Refs.Inv.slots) do
                 local id = type(slot) == "table" and slot.id or nil
                 local item = type(id) == "number" and ItemDB[id] or nil
-                if item and item.kind == "seed" and not seen[id] and invCount(id) >= 200 then
+                if item and item.kind == "seed" and not seen[id] and not AutoDrop.isKept(id) and invCount(id) >= 200 then
                     seen[id] = true
                     items[#items + 1] = id
                 end
@@ -86,26 +86,6 @@ local AFK = {
         name = "Auto Farm tidak dobel drop",
         old = [==[not (AutoDrop.On and table.find(AutoDrop.Items, seed))]==],
         new = [==[not (AutoDrop.On and AutoDrop.covers(seed))]==],
-    },
-    {
-        name = "toggle AFK di menu",
-        old = [==[local pointBox = box(tab, "Atur titik drop", true)]==],
-        new = [==[local pointBox = box(tab, "Atur titik drop", true)
-
-    safe(function()
-        UI.AutoDropAllSeeds = controls:Toggle({
-            Title = "AFK: drop semua seed",
-            Desc = "Semua jenis seed yang stack-nya penuh (200) ikut di-drop ke tile drop. Block tidak. Nyalakan juga 'Pantau item penuh'.",
-            Value = AutoDrop.AllSeeds,
-            Callback = function(on)
-                AutoDrop.AllSeeds = on
-                if on and not AutoDrop.On then
-                    notify("Auto Drop", "Nyalakan juga 'Pantau item penuh' dan atur tile drop", 4)
-                end
-                if Session.Ready then Config.save(true) end
-            end,
-        })
-    end)]==],
     },
 }
 
@@ -295,7 +275,6 @@ do (function()
         { "Lahan", "Dirt Farm", "layout-grid", "world" },
         { "Pabrik", "Pabrik", "factory", "world" },
         { "Auto Drop", "Drop", "package-open", "shop" },
-        { "Titik Drop", "Titik Drop", "map-pin", "shop" },
         { "Vending", "Vending", "store", "shop" },
         { "Tas", "Tas", "backpack", "shop" },
         { "Growscan", "Growscan", "scan-search", "info" },
@@ -317,6 +296,7 @@ do (function()
             if ok and tab then Session.PreTabs[e[1]] = tab end
         end
     end
+    Session.PreTabs["Titik Drop"] = Session.PreTabs["Auto Drop"] -- satu tab Drop
 end)() end
 
 local function makeTab(title, icon, group)
@@ -363,7 +343,13 @@ Box.SetPerf = box(makeTab("Performa", "gauge", "setel"), "Performa", true)]==],
     ["Koneksi & Config"] = "Connection & Config",
     ["Status Harvest"] = "Harvest Status", ["Jalankan Harvest"] = "Run Harvest",
     ["Status Dirt Farm"] = "Dirt Farm Status", ["Bangun Dirt Farm"] = "Build Dirt Farm",
-    ["Status Auto Mods"] = "Auto Mods Status", ["Aktifkan Auto Mods"] = "Enable Auto Mods",]==],
+    ["Status Auto Mods"] = "Auto Mods Status", ["Aktifkan Auto Mods"] = "Enable Auto Mods",
+    ["Lanjutan: pilih item sendiri"] = "Advanced: pick items yourself",
+    ["Lanjutan: drop di world lain"] = "Advanced: drop in another world",
+    ["Set titik drop di sini"] = "Set drop point here",
+    ["Berdiri di tempat drop lalu tekan. Dipakai semua fitur drop."] = "Stand where you want to drop, then press. Used by every drop feature.",
+    ["Seed yang stack-nya penuh (200) dibawa ke titik drop, lalu balik farming. Block atau item lain bisa dipilih di Lanjutan."] =
+        "Full seed stacks (200) are taken to the drop point, then back to farming. Blocks or other items can be picked under Advanced.",]==],
     },
 }
 
@@ -542,6 +528,59 @@ end]==],
     },
 }
 
+
+---------------------------------------------------------------------
+-- SATU TAB DROP: satu toggle (Auto Drop), satu tombol set titik, sisanya di "Lanjutan"
+--  - Titik drop yang diset di sini ikut dipakai Pabrik, Harvest & Auto Farm (satu titik untuk semua)
+--  - Seed yang sedang dipakai Pabrik / Harvest / Splice tidak ikut di-drop
+---------------------------------------------------------------------
+local DROPUI = {
+    { name = "kotak Auto Drop", old = [==[local controls = box(tab, "Kontrol", true)]==], new = [==[local controls = box(tab, "Auto Drop", true)]==] },
+    { name = "kotak Lanjutan item", old = [==[local itemBox = box(tab, "Item", true)]==], new = [==[local itemBox = box(tab, "Lanjutan: pilih item sendiri", false)]==] },
+    { name = "kotak titik digabung", old = [==[local pointBox = box(tab, "Atur titik drop", true)]==], new = [==[local pointBox = controls]==] },
+    { name = "judul toggle", old = [==[Title = "Pantau item penuh",]==], new = [==[Title = "Auto Drop",]==] },
+    {
+        name = "deskripsi toggle",
+        old = [==[Desc = "Item mencapai 200 lalu dibawa ke tile drop. Setelah itu kembali dan lanjut farming.",]==],
+        new = [==[Desc = "Seed yang stack-nya penuh (200) dibawa ke titik drop, lalu balik farming. Block atau item lain bisa dipilih di Lanjutan.",]==],
+    },
+    {
+        name = "pilih tile ke Lanjutan",
+        old = "pointBox:Button({\n            Title = \"Pilih tile drop\",",
+        new = "itemBox:Button({\n            Title = \"Pilih tile drop\",",
+    },
+    {
+        name = "tombol set titik",
+        old = [==[Title = "Pakai tile tempat berdiri sekarang",]==],
+        new = [==[Title = "Set titik drop di sini",
+            Desc = "Berdiri di tempat drop lalu tekan. Dipakai semua fitur drop.",]==],
+    },
+    {
+        name = "satu titik untuk semua (set)",
+        old = [==[AutoDrop.X, AutoDrop.Y, AutoDrop.World = x, y, world]==],
+        new = [==[AutoDrop.X, AutoDrop.Y, AutoDrop.World = x, y, world
+        Pabrik.DropX, Pabrik.DropY, Pabrik.DropWorld = x, y, world
+        if UI.DropWorldInput then pcall(function() UI.DropWorldInput:Set(world) end) end]==],
+    },
+    {
+        name = "satu titik untuk semua (hapus di grid)",
+        old = [==[AutoDrop.X, AutoDrop.Y, AutoDrop.World = -1, -1, ""]==],
+        new = [==[AutoDrop.X, AutoDrop.Y, AutoDrop.World = -1, -1, ""
+            Pabrik.DropX = -1
+            Pabrik.DropY = -1]==],
+    },
+    {
+        name = "satu titik untuk semua (hapus di Lanjutan)",
+        old = [==[Pabrik.DropX, Pabrik.DropY = -1, -1]==],
+        new = [==[Pabrik.DropX, Pabrik.DropY = -1, -1
+                AutoDrop.X = -1
+                AutoDrop.Y = -1
+                AutoDrop.World = ""]==],
+    },
+    { name = "status titik drop lama", old = [==[UI.DropPointStatus = DTab:Paragraph({ Title = "Titik Drop", Desc = "-" })]==], new = [==[UI.DropPointStatus = nil]==] },
+    { name = "kotak drop world lain", old = [==[local dBox = box(DTab, "Atur titik drop", true)]==], new = [==[local dBox = box(DTab, "Lanjutan: drop di world lain", false)]==] },
+}
+
 -- Semua teks harus muncul tepat 1x; kalau tidak, seluruh daftar dilewati.
 local function applyPatches(source, list)
     local out = source
@@ -598,7 +637,7 @@ local function pickCompiled(source)
     local fixed, fixProblem = applyPatches(source, FIX)
     if not fixed then print("[AFK] Perbaikan kompilasi tidak dipasang: " .. tostring(fixProblem)) end
     local current, added = fixed or source, {}
-    for _, feature in ipairs({ { "AFK", AFK }, { "FPS Boost", FPS }, { "Susunan menu", LAYOUT }, { "UI Farm", FARMUI }, { "Nama baru", RENAME }, { "Nama utimeme", BRAND }, { "Hubungkan otomatis", AUTOLINK }, { "Perbaikan dropdown", DROPFIX }, { "Perbaikan reconnect", REJOINFIX } }) do
+    for _, feature in ipairs({ { "AFK", AFK }, { "Satu tab Drop", DROPUI }, { "FPS Boost", FPS }, { "Susunan menu", LAYOUT }, { "UI Farm", FARMUI }, { "Nama baru", RENAME }, { "Nama utimeme", BRAND }, { "Hubungkan otomatis", AUTOLINK }, { "Perbaikan dropdown", DROPFIX }, { "Perbaikan reconnect", REJOINFIX } }) do
         local patched, problem = applyPatches(current, feature[2])
         if patched then
             current = patched
